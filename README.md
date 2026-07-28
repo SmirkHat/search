@@ -40,4 +40,4 @@ pnpm bangs:sync
 
 Lokální override v sync scriptu: `t3`, `gweb`, `npmx`, searx, … Katalog: `bangs-hot.json` (~top 500 podle DDG popularity) se načte hned; plný `bangs.json` až při neznámém bangu (nebo na pozadí). Cache: IndexedDB + Cache Storage (SW) + HTTP; prefs (custom bangs / default / searx / frecency) jsou v IDB kvůli SW.
 
-Založeno na myšlence projektu [Unduck](https://github.com/t3dotgg/unduck).
+Založeno na myšlence projektu [Unduck](https://github.com/t3dotgg/unduck) 🤠
