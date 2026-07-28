@@ -20,6 +20,11 @@ import {
   validateBangInput,
 } from "./custom-bangs";
 import {
+  canResolveWithMap,
+  withPrefsOverlays,
+  INLINE_HOT_MAP,
+} from "../shared/hot-redirect";
+import {
   type Bang,
   ensureEssentialBangs,
   extractBangTrigger,
@@ -1269,6 +1274,26 @@ function renderLanding(
   }
 }
 
+/** Sync redirect from inlined hot map — no catalog await (SPA fallback). */
+function trySyncHotRedirect(query: string): string | null {
+  const bangPrefix = getBangPrefix();
+  const map = withPrefsOverlays(INLINE_HOT_MAP, {
+    customBangs: loadCustomBangs(),
+    customSearxUrl: getSearxInstanceHost(),
+  });
+  if (!canResolveWithMap(query, map, bangPrefix)) return null;
+  const url = resolveBangRedirectUrl(
+    query,
+    map,
+    getDefaultBangTrigger(),
+    resolveOptions(),
+  );
+  if (!url) return null;
+  // Own a copy — never expose the shared INLINE_HOT_MAP to later SPA mutations.
+  bangMap = map === INLINE_HOT_MAP ? new Map(map) : map;
+  return url;
+}
+
 async function boot() {
   const app = document.querySelector<HTMLDivElement>("#app")!;
   const query =
@@ -1277,6 +1302,18 @@ async function boot() {
   // Don't silently overwrite prefs during a search redirect.
   if (query && peekSharePrefs()) {
     clearShareHash();
+  }
+
+  // Fast path: common bangs / default search without waiting on IDB/network.
+  if (query) {
+    const syncUrl = trySyncHotRedirect(query);
+    if (syncUrl) {
+      void syncPrefsToIdb();
+      pushHistory(query);
+      void recordBangUsage(usageTriggerForQuery(query));
+      window.location.replace(syncUrl);
+      return;
+    }
   }
 
   let baseMap: Map<string, Bang>;

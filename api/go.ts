@@ -4,42 +4,19 @@
  */
 
 import { inflateBangs } from "../shared/bang-compact";
-import { HOT_BANGS } from "../shared/bangs-hot.generated";
-import { searxSearchTemplate } from "../shared/searx";
+import { cookieValue } from "../shared/cookie";
+import { INLINE_HOT_MAP, withPrefsOverlays } from "../shared/hot-redirect";
 import { normalizeBangPrefix } from "../shared/share-prefs";
-import {
-  buildBangMap,
-  ensureEssentialBangs,
-  resolveBangRedirectUrl,
-  type Bang,
-} from "../src/redirect";
+import { resolveBangRedirectUrl, type Bang } from "../src/redirect";
 
 export const config = {
   runtime: "edge",
 };
 
-const HOT_MAP = ensureEssentialBangs(
-  buildBangMap(inflateBangs([...HOT_BANGS])),
-);
-
-function cookieValue(
-  header: string | null,
-  name: string,
-): string | null {
-  if (!header) return null;
-  const match = header.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  if (!match?.[1]) return null;
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return match[1];
-  }
-}
-
 function parseCustomBangs(raw: string | null): Bang[] {
   if (!raw) return [];
   try {
-    const data = JSON.parse(raw) as unknown;
+    const data: unknown = JSON.parse(raw);
     if (!Array.isArray(data)) return [];
     return inflateBangs(
       data.slice(0, 40).map((item) => {
@@ -86,18 +63,10 @@ export default async function handler(request: Request): Promise<Response> {
   const searxHost = cookieValue(cookie, "searx-instance") ?? "";
   const custom = parseCustomBangs(cookieValue(cookie, "custom-bangs"));
 
-  const map = ensureEssentialBangs(new Map(HOT_MAP));
-  for (const bang of custom) map.set(bang.t, bang);
-  if (searxHost) {
-    for (const t of ["searx", "searxng"]) {
-      map.set(t, {
-        t,
-        d: searxHost,
-        u: searxSearchTemplate(searxHost),
-        s: "SearxNG",
-      });
-    }
-  }
+  const map = withPrefsOverlays(INLINE_HOT_MAP, {
+    customBangs: custom,
+    customSearxUrl: searxHost,
+  });
 
   const target = resolveBangRedirectUrl(q, map, defaultBang, { bangPrefix });
   if (!target) return serveSpa(request);

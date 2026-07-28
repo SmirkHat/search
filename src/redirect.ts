@@ -90,7 +90,7 @@ function bangDomain(bang: Bang): string {
 /** Longest trigger in `bangMap` that is a prefix of `token` (case-insensitive). */
 export function longestTriggerPrefix(
   token: string,
-  bangMap: Map<string, Bang>,
+  bangMap: ReadonlyMap<string, Bang>,
 ): string | null {
   const lower = token.toLowerCase();
   let best: string | null = null;

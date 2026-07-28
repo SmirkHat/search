@@ -86,7 +86,7 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,ico,svg,png,webp,woff2,webmanifest}"],
         globIgnores: ["**/bangs.json"],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-        minify: false,
+        minify: true,
       },
       manifest: {
         name: "SmirkHat Search",

@@ -11,13 +11,17 @@ import { ExpirationPlugin } from "workbox-expiration";
 import { CacheableResponsePlugin } from "workbox-cacheable-response";
 
 import { inflateBangs } from "../shared/bang-compact";
+import { cookieValue } from "../shared/cookie";
 import {
   bumpFrecency,
   frecencySetCookieHeader,
   parseFrecencyCookie,
 } from "../shared/bang-suggest";
-import { HOT_BANGS } from "../shared/bangs-hot.generated";
-import { searxSearchTemplate } from "../shared/searx";
+import {
+  canResolveWithMap,
+  INLINE_HOT_MAP,
+  withPrefsOverlays,
+} from "../shared/hot-redirect";
 import {
   DEFAULT_PREFS,
   idbGetCatalog,
@@ -28,8 +32,6 @@ import {
 import { normalizeBangPrefix } from "../shared/share-prefs";
 import {
   buildBangMap,
-  ensureEssentialBangs,
-  extractBangTrigger,
   extractSnapTriggers,
   matchBang,
   resolveBangRedirectUrl,
@@ -47,9 +49,6 @@ void self.skipWaiting();
 
 const HOT_CACHE = "bangs-hot";
 const FULL_CACHE = "bangs-full";
-const INLINE_HOT = ensureEssentialBangs(
-  buildBangMap(inflateBangs([...HOT_BANGS])),
-);
 
 registerRoute(
   ({ url }) => url.pathname === "/bangs-hot.json",
@@ -85,24 +84,13 @@ registerRoute(
   }),
 );
 
-function cookieValue(header: string | null, name: string): string | null {
-  if (!header) return null;
-  const match = header.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  if (!match?.[1]) return null;
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return match[1];
-  }
-}
-
 function prefsFromCookies(request: Request): SearchPrefs {
   const cookie = request.headers.get("cookie");
   let customBangs: Bang[] = [];
   const rawCustom = cookieValue(cookie, "custom-bangs");
   if (rawCustom) {
     try {
-      const data = JSON.parse(rawCustom) as unknown;
+      const data: unknown = JSON.parse(rawCustom);
       if (Array.isArray(data)) {
         customBangs = inflateBangs(
           data.slice(0, 40).map((item) => ({
@@ -137,9 +125,10 @@ async function bangsFromCache(
 ): Promise<Bang[] | null> {
   try {
     const cache = await caches.open(cacheName);
-    const hit = await cache.match(path);
+    const absolute = new URL(path, self.location.origin).href;
     const res =
-      hit ??
+      (await cache.match(absolute)) ??
+      (await cache.match(path)) ??
       (await (async () => {
         for (const req of await cache.keys()) {
           if (new URL(req.url).pathname === path) {
@@ -151,7 +140,6 @@ async function bangsFromCache(
     if (!res) return null;
     const data: unknown = await res.clone().json();
     if (!isBangArray(data)) {
-      // Compact {t,u} rows
       return inflateBangs(data as { t: string; u: string }[]);
     }
     return inflateBangs(data);
@@ -160,42 +148,20 @@ async function bangsFromCache(
   }
 }
 
-function applyPrefsOverlays(
-  base: Map<string, Bang>,
-  prefs: SearchPrefs,
-): Map<string, Bang> {
-  const map = ensureEssentialBangs(new Map(base));
-  for (const bang of prefs.customBangs ?? []) map.set(bang.t, bang);
-  const host = prefs.customSearxUrl?.trim();
-  if (host) {
-    for (const t of ["searx", "searxng"]) {
-      map.set(t, {
-        t,
-        d: host,
-        u: searxSearchTemplate(host),
-        s: "SearxNG",
-      });
-    }
-  }
-  return map;
-}
-
 async function loadFullIfNeeded(
   query: string,
   bangPrefix: string,
   map: Map<string, Bang>,
   prefs: SearchPrefs,
 ): Promise<Map<string, Bang>> {
-  const hint = extractBangTrigger(query, bangPrefix);
-  if (!hint) return map;
-  if (matchBang(query, map, bangPrefix)) return map;
+  if (canResolveWithMap(query, map, bangPrefix)) return map;
 
   const full =
     (await bangsFromCache(FULL_CACHE, "/bangs.json")) ??
     (await idbGetCatalog("full"))?.bangs ??
     null;
   if (!full?.length) return map;
-  return applyPrefsOverlays(buildBangMap(inflateBangs(full)), prefs);
+  return withPrefsOverlays(buildBangMap(inflateBangs(full)), prefs);
 }
 
 function usageTrigger(
@@ -217,21 +183,22 @@ async function tryBangRedirect(request: Request): Promise<Response | null> {
 
   // Cookies first (sync) — do not block redirect on IDB.
   const cookiePrefs = prefsFromCookies(request);
-  let map = applyPrefsOverlays(INLINE_HOT, cookiePrefs);
-  map = await loadFullIfNeeded(q, cookiePrefs.bangPrefix || "!", map, cookiePrefs);
+  const bangPrefix = cookiePrefs.bangPrefix || "!";
+  let map = withPrefsOverlays(INLINE_HOT_MAP, cookiePrefs);
+  map = await loadFullIfNeeded(q, bangPrefix, map, cookiePrefs);
 
   const target = resolveBangRedirectUrl(
     q,
     map,
     cookiePrefs.defaultBang || "g",
-    { bangPrefix: cookiePrefs.bangPrefix || "!" },
+    { bangPrefix },
   );
   if (!target) return null;
 
   const trigger = usageTrigger(
     q,
     cookiePrefs.defaultBang || "g",
-    cookiePrefs.bangPrefix || "!",
+    bangPrefix,
     map,
   );
   const nextFrecency = bumpFrecency(cookiePrefs.frecency, trigger);
