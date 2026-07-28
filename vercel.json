@@ -1,0 +1,12 @@
+{
+  "buildCommand": "pnpm build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/",
+      "has": [{ "type": "query", "key": "q", "value": ".+" }],
+      "destination": "/api/go"
+    },
+    { "source": "/ac", "destination": "/api/ac" }
+  ]
+}

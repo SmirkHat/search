@@ -1,0 +1,36 @@
+name: Sync bang catalog
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install
+      - run: pnpm bangs:sync
+      - name: Create PR if catalog changed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore: sync DuckDuckGo + Kagi bang catalogs"
+          title: "chore: sync bang catalogs"
+          body: |
+            Automated merge of DuckDuckGo + Kagi bangs (`pnpm bangs:sync`).
+
+            Priority: local overrides > Kagi > DuckDuckGo.
+          branch: chore/bangs-sync
+          delete-branch: true

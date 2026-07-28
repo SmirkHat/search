@@ -1,39 +1,79 @@
 <!doctype html>
-<html lang="cs" style="background-color: #131313; color-scheme: dark">
+<html lang="cs">
   <head>
     <meta charset="UTF-8" />
-    <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#131313" />
-    <link rel="icon" type="image/svg+xml" href="/search.svg" />
-    <link
-      rel="preconnect"
-      href="https://fonts.googleapis.com"
-      crossorigin="anonymous"
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="theme-color"
+      content="#f7f7f5"
+      media="(prefers-color-scheme: light)"
     />
-    <link
-      rel="preconnect"
-      href="https://fonts.gstatic.com"
-      crossorigin="anonymous"
+    <meta
+      name="theme-color"
+      content="#171717"
+      media="(prefers-color-scheme: dark)"
     />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png" />
+    <link
+      rel="search"
+      type="application/opensearchdescription+xml"
+      title="SmirkHat Search"
+      href="/opensearch.xml"
+    />
+    <!-- Start bang catalogs before JS parses -->
     <link
       rel="preload"
-      as="style"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      href="/bangs-hot.json"
+      as="fetch"
+      crossorigin="anonymous"
     />
     <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-      media="print"
-      onload="this.media='all'"
+      rel="prefetch"
+      href="/bangs.json"
+      as="fetch"
+      crossorigin="anonymous"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Unduck</title>
+    <title>SmirkHat Search</title>
     <meta
       name="description"
-      content="Lepší výchozí vyhledávač (s bangy!)"
+      content="SmirkHat Search — hledej s bangy na stránce nebo z adresního řádku prohlížeče."
     />
+    <meta name="application-name" content="SmirkHat Search" />
+    <style>
+      html,
+      body {
+        background-color: #f7f7f5;
+      }
+      @media (prefers-color-scheme: dark) {
+        html,
+        body {
+          background-color: #171717;
+        }
+      }
+    </style>
+    <script>
+      /* Warm HTTP + Cache Storage as early as possible */
+      (function () {
+        if (!window.fetch) return;
+        var hot = "/bangs-hot.json";
+        var full = "/bangs.json";
+        fetch(hot, { credentials: "same-origin" }).catch(function () {});
+        var prefetchFull = function () {
+          fetch(full, { credentials: "same-origin" }).catch(function () {});
+        };
+        if ("requestIdleCallback" in window) {
+          requestIdleCallback(prefetchFull, { timeout: 2000 });
+        } else {
+          setTimeout(prefetchFull, 1);
+        }
+      })();
+    </script>
   </head>
-  <body style="background-color: #131313">
+  <body>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
