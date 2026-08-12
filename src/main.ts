@@ -48,24 +48,8 @@ import {
   parseSearxHostInput,
   searxSearchTemplate,
 } from "../shared/searx";
-import {
-  buildShareHash,
-  decodeSharePayload,
-  encodeSharePayload,
-  extractShareFromHash,
-  normalizeBangPrefix,
-  sharePrefsEqual,
-  summarizeSharePrefs,
-  type ShareablePrefs,
-} from "../shared/share-prefs";
+import { normalizeBangPrefix } from "../shared/bang-prefix";
 import { recordBangUsage, syncPrefsToIdb } from "./prefs-sync";
-import {
-  clearHistory,
-  isHistoryEnabled,
-  loadHistory,
-  pushHistory,
-  setHistoryEnabled,
-} from "./search-history";
 import "./fonts.css";
 import "./global.css";
 
@@ -113,22 +97,23 @@ async function copyText(text: string): Promise<boolean> {
 type SearchEngine = { t: string; label: string; domain: string };
 
 const SEARCH_ENGINES: SearchEngine[] = [
-  { t: "g", label: "Google", domain: "www.google.com" },
-  { t: "gweb", label: "Google (Bez slopu)", domain: "www.google.com" },
-  { t: "ddg", label: "DuckDuckGo", domain: "duckduckgo.com" },
-  { t: "b", label: "Bing", domain: "www.bing.com" },
-  { t: "searx", label: "SearxNG", domain: "search.rhscz.eu" },
-  { t: "kagi", label: "Kagi", domain: "kagi.com" },
-  { t: "mojeek", label: "Mojeek", domain: "www.mojeek.com" },
-  { t: "seznam", label: "Seznam", domain: "www.seznam.cz" },
-  { t: "sp", label: "Startpage", domain: "www.startpage.com" },
   { t: "brave", label: "Brave Search", domain: "search.brave.com" },
-  { t: "yandex", label: "Yandex", domain: "yandex.com" },
+  { t: "kagi", label: "Kagi", domain: "kagi.com" },
+  { t: "tiago", label: "Tiago", domain: "search.tiago.zip" },
+  { t: "sp", label: "Startpage", domain: "www.startpage.com" },
+  { t: "searx", label: "SearxNG", domain: "search.rhscz.eu" },
+  { t: "ddg", label: "DuckDuckGo", domain: "duckduckgo.com" },
   { t: "qwant", label: "Qwant", domain: "www.qwant.com" },
-  { t: "ecosia", label: "Ecosia", domain: "www.ecosia.org" },
   { t: "swisscows", label: "Swisscows", domain: "swisscows.com" },
-  { t: "yep", label: "Yep", domain: "yep.com" },
+  { t: "ecosia", label: "Ecosia", domain: "www.ecosia.org" },
+  { t: "mojeek", label: "Mojeek", domain: "www.mojeek.com" },
+  { t: "gweb", label: "Google Web", domain: "www.google.com" },
+  { t: "g", label: "Google", domain: "www.google.com" },
+  { t: "b", label: "Bing", domain: "www.bing.com" },
+  { t: "seznam", label: "Seznam", domain: "www.seznam.cz" },
   { t: "y", label: "Yahoo", domain: "search.yahoo.com" },
+  { t: "yandex", label: "Yandex", domain: "yandex.com" },
+  { t: "yep", label: "Yep", domain: "yep.com" },
 ];
 
 let bangMap = new Map<string, Bang>();
@@ -151,10 +136,6 @@ function siteOrigin(): string {
 
 function siteSearchUrl(): string {
   return `${siteOrigin()}?q=%s`;
-}
-
-function siteSuggestUrl(): string {
-  return `${siteOrigin()}/ac?q=%s`;
 }
 
 function enginesForPicker(currentDefault: string): SearchEngine[] {
@@ -284,8 +265,9 @@ function engineDropdownHtml(currentDefault: string): string {
             `;
           }).join("")}
           <li class="searx-custom" role="presentation">
-            <div class="searx-custom-form" data-searx-custom-form>
-              <label class="searx-custom-label" for="searx-custom-input">Vlastní instance</label>
+            <button type="button" class="searx-custom-toggle" data-searx-custom-toggle>Vlastní instance…</button>
+            <div class="searx-custom-form" data-searx-custom-form hidden>
+              <label class="searx-custom-label" for="searx-custom-input">Vlastní hostname</label>
               <div class="searx-custom-row">
                 <input
                   id="searx-custom-input"
@@ -357,7 +339,6 @@ function goToSearch(query: string) {
     resolveOptions(),
   );
   if (!url) return false;
-  pushHistory(query);
   void recordBangUsage(usageTriggerForQuery(query));
   // replace — avoid flooding tab/history with intermediate search URLs (#68)
   window.location.replace(url);
@@ -385,92 +366,16 @@ function refreshBangMap(base: Map<string, Bang>) {
   );
 }
 
-function currentShareablePrefs(): Omit<ShareablePrefs, "v"> {
-  return {
-    defaultBang: getDefaultBangTrigger(),
-    customBangs: loadCustomBangs(),
-    customSearxUrl: getSearxInstanceHost(),
-    bangPrefix: getBangPrefix(),
-  };
-}
-
-function clearShareHash(): void {
-  history.replaceState(
-    null,
-    "",
-    window.location.pathname + window.location.search,
-  );
-}
-
-function peekSharePrefs(): ShareablePrefs | null {
-  const raw = extractShareFromHash(window.location.hash);
-  if (!raw) return null;
-  return decodeSharePayload(raw);
-}
-
-async function applySharePrefs(prefs: ShareablePrefs): Promise<void> {
-  setDefaultBangTrigger(prefs.defaultBang);
-  setBangPrefix(prefs.bangPrefix);
-  saveCustomBangs(prefs.customBangs);
-  if (prefs.customSearxUrl) {
-    setSearxInstanceHost(prefs.customSearxUrl);
-  }
-  await syncPrefsToIdb({
-    defaultBang: prefs.defaultBang,
-    customBangs: prefs.customBangs,
-    customSearxUrl: prefs.customSearxUrl || getSearxInstanceHost(),
-    bangPrefix: prefs.bangPrefix,
-  });
-}
-
-function shareImportBannerHtml(prefs: ShareablePrefs): string {
-  const current: ShareablePrefs = { v: 1, ...currentShareablePrefs() };
-  const same = sharePrefsEqual(current, prefs);
-  if (same) {
-    return `
-      <aside class="share-import" role="status" data-share-import>
-        <p class="share-import-title">Toto nastavení už máš</p>
-        <p class="share-import-summary">${escapeHtml(summarizeSharePrefs(prefs))}</p>
-        <div class="share-import-actions">
-          <button type="button" class="share-import-btn" data-share-dismiss>Zavřít</button>
-        </div>
-      </aside>
-    `;
-  }
-  return `
-    <aside class="share-import" role="dialog" aria-labelledby="share-import-title" data-share-import>
-      <p class="share-import-title" id="share-import-title">Importovat nastavení?</p>
-      <p class="share-import-summary">${escapeHtml(summarizeSharePrefs(prefs))}</p>
-      <p class="share-import-hint">Přepíše výchozí vyhledávač, vlastní bangy a znak bangu v tomto prohlížeči.</p>
-      <div class="share-import-actions">
-        <button type="button" class="share-import-btn" data-share-dismiss>Zrušit</button>
-        <button type="button" class="share-import-btn" data-share-backup>Zálohovat a přepsat</button>
-        <button type="button" class="share-import-btn share-import-btn--primary" data-share-apply>Přepsat</button>
-      </div>
-      <p class="bang-status" data-share-import-status role="status"></p>
-    </aside>
-  `;
-}
 
 function renderLanding(
   baseMap: Map<string, Bang>,
-  options: { pendingShare?: ShareablePrefs | null; flash?: string } = {},
 ) {
   refreshBangMap(baseMap);
   const app = document.querySelector<HTMLDivElement>("#app")!;
   const currentDefault = getDefaultBangTrigger();
   const bangPrefix = getBangPrefix();
   syncSuggestEngineCookie(currentDefault);
-  const suggestLabel =
-    SUGGEST_PROVIDER_LABEL[currentSuggestProvider(currentDefault)] ??
-    "DuckDuckGo";
   const custom = loadCustomBangs();
-  const historyOn = isHistoryEnabled();
-  const history = historyOn ? loadHistory() : [];
-  const pendingShare =
-    options.pendingShare !== undefined
-      ? options.pendingShare
-      : peekSharePrefs();
 
   app.innerHTML = `
     <div class="page">
@@ -478,9 +383,9 @@ function renderLanding(
         <header class="brand">
           <img class="logo" src="/logo.svg" alt="" width="92" height="92" />
           <h1 class="brand-title"><span>SmirkHat</span> Search</h1>
+          <p class="brand-tagline">Rychlé, anonymní, bez reklam a sledování.</p>
         </header>
 
-        ${pendingShare ? shareImportBannerHtml(pendingShare) : ""}
 
         <form class="search-form" action="/" method="get">
           <label class="sr-only" for="search-q">Hledaný výraz</label>
@@ -491,7 +396,7 @@ function renderLanding(
                 name="q"
                 type="search"
                 class="search-input"
-                placeholder="${escapeHtml(bangPrefix)}gh · smirkhat ${escapeHtml(bangPrefix)}gh · @w"
+                placeholder="Hledej…"
                 autocomplete="off"
                 autocorrect="off"
                 autocapitalize="off"
@@ -520,132 +425,130 @@ function renderLanding(
 
         ${engineDropdownHtml(currentDefault)}
 
-        <details class="settings-panel">
-          <summary class="settings-summary">Nastavení</summary>
-          <div class="settings-body">
-            <section class="settings-section" aria-labelledby="settings-bangs-heading">
-              <h2 class="settings-heading" id="settings-bangs-heading">Vlastní bangy</h2>
-              <form class="bang-add" autocomplete="off">
-                <div class="bang-add-row">
-                  <input name="s" class="bang-add-input bang-add-s" placeholder="Název" maxlength="64" spellcheck="false" aria-label="Název vyhledávače" data-bang-s />
-                  <label class="bang-add-trigger">
-                    <span class="bang-add-bang">${escapeHtml(bangPrefix)}</span>
-                    <input name="t" class="bang-add-input bang-add-t" placeholder="gh" maxlength="32" spellcheck="false" required aria-label="Zkratka bangu" data-bang-t />
-                  </label>
-                </div>
-                <div class="bang-add-row bang-add-row--url">
-                  <input name="u" class="bang-add-input bang-add-u" placeholder="https://smht.eu?q=%s" spellcheck="false" required aria-label="URL šablona s %s" data-bang-u />
-                  <button class="bang-add-submit" type="submit">Přidat</button>
-                </div>
-              </form>
-              <p class="bang-preview" data-bang-preview hidden>
-                <span class="bang-preview-query" data-bang-preview-query></span>
-                <span class="bang-preview-arrow" aria-hidden="true">→</span>
-                <span class="bang-preview-url" data-bang-preview-url></span>
-              </p>
-              <p class="bang-status" role="status"></p>
-              <div data-custom-list>
-                ${customBangsListHtml(custom)}
-              </div>
-            </section>
+        <p class="brand-tagline">
+          <strong>Bangy</strong> (<code>!</code>) přesměrují hledání na jiný vyhledávač: napiš <code>!w praha</code> a hledáš na Wikipedii, <code>!gi kočky</code> na Google Obrázcích, <code>!yt song</code> na YouTube, <code>!gh kód</code> na GitHubu — podporujeme přes 10&nbsp;000 bangů.
+        </p>
 
-            <section class="settings-section" aria-labelledby="settings-browser-heading">
-              <h2 class="settings-heading" id="settings-browser-heading">Prohlížeč</h2>
-              <p class="settings-note">
-                Návrhy v adresním řádku: <span data-suggest-label>${suggestLabel}</span>
-              </p>
-              <label class="settings-label" for="site-search-url">Vyhledávání</label>
+        <p class="brand-tagline">
+          <strong>Snapy</strong> (<code>@</code>) filtrují výsledky tvého vyhledávače na konkrétní web: <code>@r recenze</code> prohledá Reddit, <code>@yt návod</code> YouTube.
+        </p>
+
+        <div class="utility-links">
+          <button type="button" class="utility-link" data-toggle-modal="settings" aria-label="Nastavení">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Nastavení
+          </button>
+          <button type="button" class="utility-link" data-toggle-modal="browser" aria-label="Přidat do prohlížeče">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            Přidat do prohlížeče
+          </button>
+        </div>
+
+        <div class="modal-overlay" data-modal="settings" hidden>
+          <div class="modal" role="dialog" aria-labelledby="modal-settings-title">
+            <div class="modal-header">
+              <h2 class="modal-title" id="modal-settings-title">Nastavení</h2>
+              <button type="button" class="modal-close" data-close-modal aria-label="Zavřít">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
+            <div class="modal-body">
+              <section class="settings-section" aria-labelledby="settings-bangs-heading">
+                <h2 class="settings-heading" id="settings-bangs-heading">Vlastní bangy</h2>
+                <form class="bang-add" autocomplete="off">
+                  <div class="bang-add-row">
+                    <input name="s" class="bang-add-input bang-add-s" placeholder="Název" maxlength="64" spellcheck="false" aria-label="Název vyhledávače" data-bang-s />
+                    <label class="bang-add-trigger">
+                      <span class="bang-add-bang">${escapeHtml(bangPrefix)}</span>
+                      <input name="t" class="bang-add-input bang-add-t" placeholder="gh" maxlength="32" spellcheck="false" required aria-label="Zkratka bangu" data-bang-t />
+                    </label>
+                  </div>
+                  <div class="bang-add-row bang-add-row--url">
+                    <input name="u" class="bang-add-input bang-add-u" placeholder="https://smht.eu?q=%s" spellcheck="false" required aria-label="URL šablona s %s" data-bang-u />
+                    <button class="bang-add-submit" type="submit">Přidat</button>
+                  </div>
+                </form>
+                <p class="bang-preview" data-bang-preview hidden>
+                  <span class="bang-preview-query" data-bang-preview-query></span>
+                  <span class="bang-preview-arrow" aria-hidden="true">→</span>
+                  <span class="bang-preview-url" data-bang-preview-url></span>
+                </p>
+                <p class="bang-status" role="status"></p>
+                <div data-custom-list>
+                  ${customBangsListHtml(custom)}
+                </div>
+              </section>
+
+              <section class="settings-section" aria-labelledby="settings-more-heading">
+                <h2 class="settings-heading" id="settings-more-heading">Další</h2>
+                <div class="settings-field">
+                  <label class="settings-label" for="bang-prefix-input">Znak bangu</label>
+                  <div class="prefix-row">
+                    <input
+                      id="bang-prefix-input"
+                      type="text"
+                      maxlength="1"
+                      class="bang-prefix-input"
+                      value="${escapeHtml(bangPrefix)}"
+                      aria-label="Znak bangu"
+                      data-bang-prefix
+                    />
+                    <span class="settings-hint">např. ! $ / # — ne @</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-overlay" data-modal="browser" hidden>
+          <div class="modal" role="dialog" aria-labelledby="modal-browser-title">
+            <div class="modal-header">
+              <h2 class="modal-title" id="modal-browser-title">Přidat do prohlížeče</h2>
+              <button type="button" class="modal-close" data-close-modal aria-label="Zavřít">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
+            <div class="modal-body">
+              <p class="settings-note">Zkopíruj URL a přidej jako vlastní vyhledávač:</p>
+
+              <label class="settings-label" for="site-search-url">URL vyhledávání</label>
               <div class="url-container">
-                <input
-                  id="site-search-url"
-                  type="text"
-                  class="url-input"
-                  data-copy-target
-                  data-site-search-url
-                  value="${escapeHtml(siteSearchUrl())}"
-                  readonly
-                  aria-label="URL vlastního vyhledávače"
-                />
+                <input id="site-search-url" type="text" class="url-input" data-copy-target value="${escapeHtml(siteSearchUrl())}" readonly aria-label="URL vlastního vyhledávače" />
                 <button class="copy-button" type="button" aria-label="Kopírovat URL vyhledávání">
                   <img src="/clipboard.svg" alt="" />
                 </button>
               </div>
-              <label class="settings-label" for="site-suggest-url">Autocomplete</label>
+
+              <label class="settings-label" for="site-suggest-url">URL našeptávání / autocomplete</label>
               <div class="url-container">
-                <input
-                  id="site-suggest-url"
-                  type="text"
-                  class="url-input"
-                  data-copy-target
-                  data-site-suggest-url
-                  value="${escapeHtml(siteSuggestUrl())}"
-                  readonly
-                  aria-label="URL autocomplete"
-                />
+                <input id="site-suggest-url" type="text" class="url-input" data-copy-target value="${escapeHtml(siteOrigin())}/ac?q=%s" readonly aria-label="URL autocomplete" />
                 <button class="copy-button" type="button" aria-label="Kopírovat URL autocomplete">
                   <img src="/clipboard.svg" alt="" />
                 </button>
               </div>
-              <p class="settings-note settings-note--muted">
-                Chrome / Edge: Nastavení → Vyhledávač → Přidat. Firefox nabídne OpenSearch sám.
-              </p>
-            </section>
-
-            <section class="settings-section" aria-labelledby="settings-more-heading">
-              <h2 class="settings-heading" id="settings-more-heading">Další</h2>
-              <div class="settings-field">
-                <label class="settings-label" for="bang-prefix-input">Znak bangu</label>
-                <div class="prefix-row">
-                  <input
-                    id="bang-prefix-input"
-                    type="text"
-                    maxlength="1"
-                    class="bang-prefix-input"
-                    value="${escapeHtml(bangPrefix)}"
-                    aria-label="Znak bangu"
-                    data-bang-prefix
-                  />
-                  <span class="settings-hint">např. ! $ / # — ne @</span>
-                </div>
-              </div>
-              <div class="settings-field">
-                <span class="settings-label" id="history-label">Historie</span>
-                <label class="history-toggle">
-                  <input type="checkbox" data-history-enabled ${historyOn ? "checked" : ""} aria-describedby="history-label" />
-                  Ukládat poslední hledání (jen lokálně)
-                </label>
-                <div class="history-list" data-history-list ${historyOn && history.length ? "" : "hidden"}>
-                  ${
-                    history.length
-                      ? `<ul>${history
-                          .slice(0, 12)
-                          .map(
-                            (e) =>
-                              `<li><button type="button" class="history-item" data-history-q="${escapeHtml(e.q)}">${escapeHtml(e.q)}</button></li>`,
-                          )
-                          .join("")}</ul>
-                         <button type="button" class="settings-btn" data-history-clear>Smazat historii</button>`
-                      : `<p class="settings-note settings-note--muted">Zatím prázdná</p>`
-                  }
-                </div>
-              </div>
-              <div class="settings-field">
-                <span class="settings-label">Sdílení</span>
-                <button type="button" class="settings-btn" data-share-settings>Kopírovat odkaz na nastavení</button>
-                <p class="bang-status" data-share-status role="status"></p>
-              </div>
-              <p class="settings-note settings-note--muted">
-                Bangy: <code>${escapeHtml(bangPrefix)}gh q</code> i <code>q ${escapeHtml(bangPrefix)}gh</code> · snapy: <code>@w q</code>
-              </p>
-            </section>
+            </div>
           </div>
-        </details>
-      </div>
+        </div>
       <footer class="footer">
         Hostuje
         <a href="https://smirkhat.org" target="_blank" rel="noopener noreferrer">SmirkHat.org</a>
         <span class="footer-sep" aria-hidden="true">·</span>
-        <a href="https://github.com/SmirkHat/search" target="_blank" rel="noopener noreferrer">Zdrojový kód</a>
+        <a href="https://github.com/SmirkHat/search" target="_blank" rel="noopener noreferrer" class="footer-gh-link">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Zdrojový kód
+        </a>
       </footer>
     </div>
   `;
@@ -964,6 +867,13 @@ function renderLanding(
   };
 
   app
+    .querySelector("[data-searx-custom-toggle]")
+    ?.addEventListener("click", () => {
+      const form = app.querySelector<HTMLElement>("[data-searx-custom-form]");
+      if (form) form.hidden = !form.hidden;
+    });
+
+  app
     .querySelector("[data-searx-custom-save]")
     ?.addEventListener("click", (event) => {
       event.preventDefault();
@@ -1154,6 +1064,27 @@ function renderLanding(
     });
   }
 
+  app.querySelectorAll("[data-toggle-modal]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const name = (btn as HTMLElement).dataset.toggleModal;
+      const overlay = app.querySelector<HTMLElement>(`[data-modal="${name}"]`);
+      if (overlay) overlay.hidden = false;
+    });
+  });
+
+  app.querySelectorAll("[data-close-modal]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const overlay = (btn as HTMLElement).closest(".modal-overlay");
+      if (overlay) (overlay as HTMLElement).hidden = true;
+    });
+  });
+
+  app.querySelectorAll(".modal-overlay").forEach((overlay) => {
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) (overlay as HTMLElement).hidden = true;
+    });
+  });
+
   const prefixInput = app.querySelector<HTMLInputElement>("[data-bang-prefix]");
   prefixInput?.addEventListener("change", () => {
     const next = normalizeBangPrefix(prefixInput.value);
@@ -1170,108 +1101,6 @@ function renderLanding(
     renderLanding(baseMap);
   });
 
-  const historyToggle = app.querySelector<HTMLInputElement>(
-    "[data-history-enabled]",
-  );
-  historyToggle?.addEventListener("change", () => {
-    setHistoryEnabled(!!historyToggle.checked);
-    renderLanding(baseMap);
-  });
-
-  app.querySelector("[data-history-clear]")?.addEventListener("click", () => {
-    clearHistory();
-    renderLanding(baseMap);
-  });
-
-  app.querySelector("[data-history-list]")?.addEventListener("click", (event) => {
-    const btn = (event.target as HTMLElement).closest<HTMLButtonElement>(
-      "[data-history-q]",
-    );
-    if (!btn?.dataset.historyQ) return;
-    searchInput.value = btn.dataset.historyQ;
-    searchInput.focus();
-    goToSearch(btn.dataset.historyQ);
-  });
-
-  const shareStatus = app.querySelector<HTMLElement>("[data-share-status]");
-  app.querySelector("[data-share-settings]")?.addEventListener("click", async () => {
-    try {
-      const payload = encodeSharePayload(currentShareablePrefs());
-      const url = `${siteOrigin()}/${buildShareHash(payload)}`;
-      if (!(await copyText(url))) {
-        throw new Error("Prohlížeč neumožnil zkopírovat odkaz (zkus HTTPS).");
-      }
-      if (shareStatus) {
-        shareStatus.textContent = "Odkaz zkopírován";
-        shareStatus.dataset.state = "ok";
-      }
-    } catch (error) {
-      if (shareStatus) {
-        shareStatus.textContent =
-          error instanceof Error ? error.message : "Kopírování selhalo";
-        shareStatus.dataset.state = "error";
-      }
-    }
-  });
-
-  const importStatus = app.querySelector<HTMLElement>(
-    "[data-share-import-status]",
-  );
-
-  const dismissShareImport = () => {
-    clearShareHash();
-    renderLanding(baseMap, { pendingShare: null });
-  };
-
-  app.querySelector("[data-share-dismiss]")?.addEventListener("click", () => {
-    dismissShareImport();
-  });
-
-  const commitIncomingShare = async (backup: boolean) => {
-    if (!pendingShare) return;
-    if (backup) {
-      try {
-        const payload = encodeSharePayload(currentShareablePrefs());
-        const url = `${siteOrigin()}/${buildShareHash(payload)}`;
-        if (!(await copyText(url))) {
-          throw new Error("Zálohu se nepodařilo zkopírovat.");
-        }
-      } catch (error) {
-        if (importStatus) {
-          importStatus.textContent =
-            error instanceof Error
-              ? `${error.message} Zkus znovu, nebo zvol Přepsat.`
-              : "Záloha selhala — zkus znovu, nebo zvol Přepsat.";
-          importStatus.dataset.state = "error";
-        }
-        return;
-      }
-    }
-    await applySharePrefs(pendingShare);
-    clearShareHash();
-    refreshBangMap(baseMap);
-    renderLanding(baseMap, {
-      pendingShare: null,
-      flash: backup
-        ? "Záloha zkopírována · nastavení ze sdíleného odkazu načteno"
-        : "Nastavení ze sdíleného odkazu načteno",
-    });
-  };
-
-  app.querySelector("[data-share-backup]")?.addEventListener("click", () => {
-    void commitIncomingShare(true);
-  });
-  app.querySelector("[data-share-apply]")?.addEventListener("click", () => {
-    void commitIncomingShare(false);
-  });
-
-  if (options.flash) {
-    const status = app.querySelector<HTMLElement>("#default-bang-status");
-    if (status) {
-      status.textContent = options.flash;
-      status.dataset.state = "ok";
-    }
-  }
 }
 
 /** Sync redirect from inlined hot map — no catalog await (SPA fallback). */
@@ -1299,17 +1128,11 @@ async function boot() {
   const query =
     new URL(window.location.href).searchParams.get("q")?.trim() ?? "";
 
-  // Don't silently overwrite prefs during a search redirect.
-  if (query && peekSharePrefs()) {
-    clearShareHash();
-  }
-
   // Fast path: common bangs / default search without waiting on IDB/network.
   if (query) {
     const syncUrl = trySyncHotRedirect(query);
     if (syncUrl) {
       void syncPrefsToIdb();
-      pushHistory(query);
       void recordBangUsage(usageTriggerForQuery(query));
       window.location.replace(syncUrl);
       return;
@@ -1360,9 +1183,18 @@ async function boot() {
     renderLanding(baseMap);
     return;
   }
-  pushHistory(query);
   void recordBangUsage(usageTriggerForQuery(query));
   window.location.replace(searchUrl);
 }
 
+function purgeLegacySearchHistory(): void {
+  try {
+    localStorage.removeItem("search-history");
+    localStorage.removeItem("history-enabled");
+  } catch {
+    // ignore
+  }
+}
+
+purgeLegacySearchHistory();
 boot();

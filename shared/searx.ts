@@ -9,10 +9,14 @@ export type SearxInstance = {
 export const SEARX_INSTANCES: SearxInstance[] = [
   { host: "search.rhscz.eu", region: "NL" },
   { host: "searx.rhscz.eu", region: "CZ" },
+  { host: "searx.linxx.net", region: "DE" },
+  { host: "searxng.deggo.fyi", region: "NL" },
+  { host: "searxng.website", region: "DE" },
   { host: "searx.oloke.xyz", region: "PL" },
   { host: "searx.tiekoetter.com", region: "DE" },
-  { host: "searxng.website", region: "DE" },
   { host: "search.im-in.space", region: "DE" },
+  { host: "xka.cz", region: "FI" },
+  { host: "searx.ononoki.org", region: "US" },
 ];
 
 export const DEFAULT_SEARX_HOST = SEARX_INSTANCES[0]!.host;
@@ -21,8 +25,6 @@ export const SEARX_COOKIE = "searx-instance";
 /** Former curated hosts we no longer recommend — migrate to default. */
 const RETIRED_SEARX_HOSTS = new Set([
   "searxng.cz",
-  "searx.linxx.net",
-  "searxng.deggo.fyi",
   "searx.namejeff.xyz",
 ]);
 

@@ -14,6 +14,7 @@ export const SUGGEST_PROVIDERS = [
   "yandex",
   "kagi",
   "swisscows",
+  "tiago",
 ] as const;
 
 export type SuggestProvider = (typeof SUGGEST_PROVIDERS)[number];
@@ -32,6 +33,7 @@ export const SUGGEST_PROVIDER_LABEL: Record<SuggestProvider, string> = {
   yandex: "Yandex",
   kagi: "Kagi",
   swisscows: "Swisscows",
+  tiago: "Tiago",
 };
 
 /** Bang trigger → autocomplete provider */
@@ -71,6 +73,8 @@ export function providerForBang(trigger: string): SuggestProvider {
       return "kagi";
     case "swisscows":
       return "swisscows";
+    case "tiago":
+      return "tiago";
     default:
       return "ddg";
   }
@@ -122,6 +126,8 @@ export function upstreamSuggestUrl(
       return `https://kagi.com/api/autosuggest?q=${q}`;
     case "swisscows":
       return `https://api.swisscows.com/suggest?Query=${q}`;
+    case "tiago":
+      return `https://search.tiago.zip/suggest?q=${q}`;
     default: {
       const _exhaustive: never = provider;
       return _exhaustive;
@@ -195,6 +201,19 @@ function parseFlatStringSuggestions(data: unknown): string[] {
   return data.filter((item): item is string => typeof item === "string");
 }
 
+function parseTiagoSuggestions(data: unknown): string[] {
+  if (!data || typeof data !== "object") return [];
+  const suggestions = (data as { suggestions?: unknown }).suggestions;
+  if (!Array.isArray(suggestions)) return [];
+  return suggestions
+    .filter(
+      (item): item is { query: string } =>
+        !!item && typeof item === "object" && typeof (item as { query?: string }).query === "string",
+    )
+    .map((item) => item.query)
+    .filter(Boolean);
+}
+
 export function parseSuggestions(
   provider: SuggestProvider,
   data: unknown,
@@ -202,6 +221,7 @@ export function parseSuggestions(
   if (provider === "seznam") return parseSeznamSuggestions(data);
   if (provider === "searx") return parseSearxSuggestions(data);
   if (provider === "swisscows") return parseFlatStringSuggestions(data);
+  if (provider === "tiago") return parseTiagoSuggestions(data);
   return parseOpenSearchSuggestions(data);
 }
 

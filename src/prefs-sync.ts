@@ -5,7 +5,7 @@ import {
   serializeFrecencyCookie,
   type FrecencyMap,
 } from "../shared/bang-suggest";
-import { normalizeBangPrefix } from "../shared/share-prefs";
+import { normalizeBangPrefix } from "../shared/bang-prefix";
 import { loadCustomBangs } from "./custom-bangs";
 import { idbGetPrefs, idbSetPrefs, type SearchPrefs } from "./bang-idb";
 import {

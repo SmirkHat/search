@@ -6,7 +6,7 @@
 import { inflateBangs } from "../shared/bang-compact";
 import { cookieValue } from "../shared/cookie";
 import { INLINE_HOT_MAP, withPrefsOverlays } from "../shared/hot-redirect";
-import { normalizeBangPrefix } from "../shared/share-prefs";
+import { normalizeBangPrefix } from "../shared/bang-prefix";
 import { resolveBangRedirectUrl, type Bang } from "../src/redirect";
 
 export const config = {
@@ -57,7 +57,7 @@ export default async function handler(request: Request): Promise<Response> {
   if (!q) return serveSpa(request);
 
   const cookie = request.headers.get("cookie");
-  const defaultBang = (cookieValue(cookie, "default-bang") ?? "g").toLowerCase();
+  const defaultBang = (cookieValue(cookie, "default-bang") ?? "brave").toLowerCase();
   const bangPrefix =
     normalizeBangPrefix(cookieValue(cookie, "bang-prefix") ?? "!") ?? "!";
   const searxHost = cookieValue(cookie, "searx-instance") ?? "";

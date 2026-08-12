@@ -17,7 +17,7 @@ describe("searx hosts", () => {
     );
     expect(SEARX_INSTANCES.some((i) => i.host === "searxng.cz")).toBe(false);
     expect(SEARX_INSTANCES.some((i) => i.host === "searx.linxx.net")).toBe(
-      false,
+      true,
     );
   });
 

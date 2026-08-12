@@ -7,7 +7,7 @@ import {
   suggestBangTriggers,
   type FrecencyMap,
 } from "./bang-suggest";
-import { normalizeBangPrefix } from "./share-prefs";
+import { normalizeBangPrefix } from "./bang-prefix";
 
 export type BangCatalogEntry = { t: string };
 

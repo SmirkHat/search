@@ -35,6 +35,11 @@ export function buildBangMap(bangs: Bang[]): Map<string, Bang> {
 /** Always-available engine bangs — fills gaps in stale/incomplete catalogs (IDB). */
 export const ESSENTIAL_BANGS: readonly Bang[] = [
   {
+    t: "brave",
+    d: "search.brave.com",
+    u: "https://search.brave.com/search?q={{{s}}}",
+  },
+  {
     t: "g",
     d: "www.google.com",
     u: "https://www.google.com/search?q={{{s}}}",
@@ -64,9 +69,39 @@ export const ESSENTIAL_BANGS: readonly Bang[] = [
     d: "search.rhscz.eu",
     u: "https://search.rhscz.eu/search?q={{{s}}}",
   },
+  {
+    t: "tiago",
+    d: "search.tiago.zip",
+    u: "https://search.tiago.zip/?q={{{s}}}",
+  },
+  {
+    t: "chatgpt",
+    d: "chatgpt.com",
+    u: "https://chatgpt.com/?q={{{s}}}",
+  },
+  {
+    t: "gemini",
+    d: "gemini.google.com",
+    u: "https://gemini.google.com/app?q={{{s}}}",
+  },
+  {
+    t: "deepseek",
+    d: "chat.deepseek.com",
+    u: "https://chat.deepseek.com/?q={{{s}}}",
+  },
+  {
+    t: "claude",
+    d: "claude.ai",
+    u: "https://claude.ai/new?q={{{s}}}",
+  },
+  {
+    t: "perplexity",
+    d: "perplexity.ai",
+    u: "https://perplexity.ai/?q={{{s}}}",
+  },
 ];
 
-/** Ensure core triggers exist so `!g` never silently falls through to default. */
+/** Ensure core triggers exist so default/common bangs never fall through. */
 export function ensureEssentialBangs(map: Map<string, Bang>): Map<string, Bang> {
   const out = new Map(map);
   for (const bang of ESSENTIAL_BANGS) {
@@ -380,7 +415,7 @@ function stripDanglingBang(
 }
 
 export function getDefaultBangTrigger(): string {
-  return localStorage.getItem("default-bang") ?? "g";
+  return localStorage.getItem("default-bang") ?? "brave";
 }
 
 export function setDefaultBangTrigger(trigger: string): void {

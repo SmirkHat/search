@@ -24,7 +24,7 @@ export type SearchPrefs = {
 };
 
 export const DEFAULT_PREFS: SearchPrefs = {
-  defaultBang: "g",
+  defaultBang: "brave",
   customBangs: [],
   customSearxUrl: "",
   frecency: {},

@@ -56,7 +56,18 @@ function assetHintsPlugin(): Plugin {
 
 export default defineConfig({
   server: {
-    allowedHosts: ["prcek.local"],
+    port: 3001,
+    host: true,
+    allowedHosts: true,
+    watch: {
+      followSymlinks: false,
+      ignored: [
+        "**/.git/**",
+        "**/dist/**",
+        "**/node_modules/**",
+        "**/.pnpm-store/**",
+      ],
+    },
   },
   build: {
     modulePreload: {

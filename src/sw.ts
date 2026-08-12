@@ -29,7 +29,7 @@ import {
   idbSetPrefs,
   type SearchPrefs,
 } from "./bang-idb";
-import { normalizeBangPrefix } from "../shared/share-prefs";
+import { normalizeBangPrefix } from "../shared/bang-prefix";
 import {
   buildBangMap,
   extractSnapTriggers,
@@ -106,7 +106,7 @@ function prefsFromCookies(request: Request): SearchPrefs {
   }
 
   return {
-    defaultBang: (cookieValue(cookie, "default-bang") ?? "g").toLowerCase(),
+    defaultBang: (cookieValue(cookie, "default-bang") ?? "brave").toLowerCase(),
     bangPrefix:
       normalizeBangPrefix(cookieValue(cookie, "bang-prefix") ?? "!") ?? "!",
     customSearxUrl: cookieValue(cookie, "searx-instance") ?? "",
@@ -190,14 +190,14 @@ async function tryBangRedirect(request: Request): Promise<Response | null> {
   const target = resolveBangRedirectUrl(
     q,
     map,
-    cookiePrefs.defaultBang || "g",
+    cookiePrefs.defaultBang || "brave",
     { bangPrefix },
   );
   if (!target) return null;
 
   const trigger = usageTrigger(
     q,
-    cookiePrefs.defaultBang || "g",
+    cookiePrefs.defaultBang || "brave",
     bangPrefix,
     map,
   );
